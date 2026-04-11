@@ -314,7 +314,7 @@ const cities: CityData[] = [
     description_en: 'Starnberg sits on the northern shore of Lake Starnberg, one of Bavaria\'s most famous lakes, and is considered an exclusive residential area in the Munich commuter belt. The town enjoys stunning Alpine panoramas and a high quality of life.',
     history_en: 'Starnberg developed in the 19th century into a popular summer resort for Munich\'s population and Bavarian aristocracy. King Ludwig II drowned in Lake Starnberg in 1886 under mysterious circumstances – an unsolved riddle of Bavarian history to this day. Starnberg district is one of the wealthiest in Germany.',
     known_for_en: 'Lake Starnberg, King Ludwig II, Alpine panorama',
-    ...calcPrice(63),
+    ...calcPrice(66),
   },
   {
     slug: 'taxi-wolfratshausen-flughafen-muenchen',
