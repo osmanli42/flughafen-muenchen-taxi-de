@@ -190,7 +190,7 @@ const cities: CityData[] = [
     description_en: 'Freising lies directly adjacent to Munich Airport and is one of Bavaria\'s oldest episcopal cities with over 1,300 years of history. It is home to the world\'s oldest brewery and a magnificent cathedral hill.',
     history_en: 'For centuries Freising was the spiritual and cultural centre of Bavaria, predating Munich itself. The cathedral hill with its Dom and Diocesan Museum is one of the most important medieval ensembles in southern Germany. The Weihenstephan Brewery (founded 1040) is considered the oldest brewery in the world. Pope Benedict XVI (Joseph Ratzinger) was ordained as a priest in Freising.',
     known_for_en: 'Cathedral hill, world\'s oldest brewery, proximity to Munich Airport',
-    ...calcPrice(9),
+    ...calcPrice(11),
   },
   {
     slug: 'taxi-landsberg-am-lech-flughafen-muenchen',
@@ -252,7 +252,7 @@ const cities: CityData[] = [
     description_en: 'Erding lies just east of Munich Airport and is best known for its thermal spa (Germany\'s largest), its famous Erdinger Weissbier, and rapid growth as one of Bavaria\'s most dynamic districts.',
     history_en: 'Erding received its town charter in the 14th century and was an important stop on the salt road from Salzburg to Augsburg. In the 20th century the city\'s development was strongly shaped by Munich Airport, which opened nearby in 1992. Erding is today one of the fastest-growing cities in Bavaria.',
     known_for_en: 'Therme Erding spa, Erdinger Weissbier, proximity to Munich Airport',
-    ...calcPrice(12),
+    ...calcPrice(14),
   },
   {
     slug: 'taxi-ebersberg-flughafen-muenchen',
