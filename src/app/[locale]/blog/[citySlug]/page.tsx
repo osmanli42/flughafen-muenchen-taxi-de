@@ -5,25 +5,61 @@ import { Phone, MapPin, Clock, Users, Check, ChevronRight, Star, Car } from 'luc
 import { citiesBySlug, allCitySlugs, CityData } from '@/lib/citiesData';
 import enTranslations from '@/lib/citiesDataEn';
 import { CONTACT_INFO } from '@/lib/utils';
+import { setRequestLocale } from 'next-intl/server';
 
 const SITE_URL = 'https://www.flughafen-muenchen-taxi.de';
+const PRICES_API = 'https://api.flughafen-muenchen-taxi.de/api/prices';
+
+// Revalidate page every hour to pick up price changes from admin panel
+export const revalidate = 3600;
+
+interface PriceRate { vehicle_type: string; base_price: string; price_per_km: string; }
+
+async function fetchPrices(): Promise<{ kombi_base: number; kombi_pkm: number; van_base: number; van_pkm: number } | null> {
+  try {
+    const res = await fetch(PRICES_API, { next: { revalidate: 3600 } });
+    if (!res.ok) return null;
+    const rates: PriceRate[] = await res.json();
+    const kombi = rates.find(r => r.vehicle_type === 'kombi');
+    const van = rates.find(r => r.vehicle_type === 'van');
+    if (!kombi || !van) return null;
+    return {
+      kombi_base: parseFloat(kombi.base_price),
+      kombi_pkm: parseFloat(kombi.price_per_km),
+      van_base: parseFloat(van.base_price),
+      van_pkm: parseFloat(van.price_per_km),
+    };
+  } catch { return null; }
+}
+
+function calcCityPrices(city: CityData, rates: { kombi_base: number; kombi_pkm: number; van_base: number; van_pkm: number } | null) {
+  if (!rates) return { kombi_price: city.kombi_price, van_price: city.van_price };
+  const kombi_price = Math.round((rates.kombi_base + rates.kombi_pkm * city.distance_km) * 10) / 10;
+  const van_price = Math.round((rates.van_base + rates.van_pkm * city.distance_km) * 10) / 10;
+  return { kombi_price, van_price };
+}
 
 type Props = { params: { citySlug: string; locale: string } };
 
 export async function generateStaticParams() {
-  return allCitySlugs.map((slug) => ({ citySlug: slug }));
+  const locales = ['de', 'en', 'tr'];
+  return locales.flatMap((locale) =>
+    allCitySlugs.map((citySlug) => ({ locale, citySlug }))
+  );
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const city = citiesBySlug[params.citySlug];
   if (!city) return {};
+  const rates = await fetchPrices();
+  const { kombi_price } = calcCityPrices(city, rates);
   const isEN = params.locale === 'en';
   const title = isEN
-    ? `Taxi ${city.name} to Munich Airport – Fixed Price €${city.kombi_price}`
-    : `Taxi ${city.nameDE} Flughafen München – Festpreis ${city.kombi_price} €`;
+    ? `Taxi ${city.name} to Munich Airport – Fixed Price €${kombi_price}`
+    : `Taxi ${city.nameDE} Flughafen München – Festpreis ${kombi_price} €`;
   const description = isEN
-    ? `Book your fixed-price taxi from ${city.name} to Munich Airport (MUC). ${city.distance_km} km, approx. ${city.drive_minutes} min. From €${city.kombi_price}. 24/7 service, free cancellation.`
-    : `Taxi von ${city.nameDE} zum Flughafen München (MUC): ${city.distance_km} km, ca. ${city.drive_minutes} Min. Festpreis ab ${city.kombi_price} € – Jetzt online buchen! Kostenlose Stornierung, 24/7.`;
+    ? `Book your fixed-price taxi from ${city.name} to Munich Airport (MUC). ${city.distance_km} km, approx. ${city.drive_minutes} min. From €${kombi_price}. 24/7 service, free cancellation.`
+    : `Taxi von ${city.nameDE} zum Flughafen München (MUC): ${city.distance_km} km, ca. ${city.drive_minutes} Min. Festpreis ab ${kombi_price} € – Jetzt online buchen! Kostenlose Stornierung, 24/7.`;
   return {
     title,
     description,
@@ -43,9 +79,18 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 const countryFlag: Record<string, string> = { DE: '🇩🇪', AT: '🇦🇹', CH: '🇨🇭' };
 const countryName: Record<string, string> = { DE: 'Deutschland', AT: 'Österreich', CH: 'Schweiz' };
 
-export default function CityBlogPage({ params }: Props) {
+export default async function CityBlogPage({ params }: Props) {
+  setRequestLocale(params.locale);
+
   const city: CityData | undefined = citiesBySlug[params.citySlug];
   if (!city) notFound();
+
+  // Fetch live prices from API, fallback to citiesData values
+  const rates = await fetchPrices();
+  const livePrices = calcCityPrices(city, rates);
+  // Merge live prices into city object
+  (city as any).kombi_price = livePrices.kombi_price;
+  (city as any).van_price = livePrices.van_price;
 
   const locale = params.locale;
   const isEN = locale === 'en';
