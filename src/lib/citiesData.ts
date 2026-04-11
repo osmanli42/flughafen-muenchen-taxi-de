@@ -1187,7 +1187,7 @@ const cities: CityData[] = [
       'Isar-Ufer Promenade',
     ],
     known_for: 'Landshuter Hochzeit, St. Martin, Niederbayerische Hauptstadt',
-    ...calcPrice(43),
+    ...calcPrice(39),
   },
   {
     slug: 'taxi-straubing-flughafen-muenchen',
