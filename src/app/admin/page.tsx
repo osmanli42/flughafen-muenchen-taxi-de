@@ -5,10 +5,10 @@ import { adminApi, pricesApi, settingsApi, Booking, Price } from '@/lib/api';
 import { formatPrice, formatDateTime, cn } from '@/lib/utils';
 import {
   LogIn, LogOut, BarChart3, List, Tag, RefreshCw, ChevronLeft, ChevronRight,
-  TrendingUp, Calendar, Check, X, Search, Lock, Eye
+  TrendingUp, Calendar, Check, X, Search, Lock, Eye, FileText, Building2, Send
 } from 'lucide-react';
 
-type Tab = 'dashboard' | 'bookings' | 'prices';
+type Tab = 'dashboard' | 'bookings' | 'prices' | 'rechnung';
 
 const STATUS_COLORS: Record<string, string> = {
   new: 'bg-blue-100 text-blue-700',
@@ -43,6 +43,22 @@ export default function AdminPage() {
   const [cardVisible, setCardVisible] = useState(false);
   const [settings, setSettings] = useState<Record<string, string>>({ stadtfahrt_enabled: '0', anfahrt_price_per_km: '1.70', zwischenstopp_enabled: '0' });
   const [settingsSaving, setSettingsSaving] = useState(false);
+  // Bank/company settings
+  const [bankSettings, setBankSettings] = useState<Record<string, string>>({
+    bank_name: '', bank_iban: '', bank_bic: '', bank_kontoinhaber: '',
+    company_name: '', company_address: '', company_phone: '', company_email: '',
+    company_steuernr: '', company_ustidnr: '',
+  });
+  const [bankSaving, setBankSaving] = useState(false);
+  const [bankSuccess, setBankSuccess] = useState('');
+  // Rechnung modal
+  const [showRechnungModal, setShowRechnungModal] = useState(false);
+  const [rechnungsnummer, setRechnungsnummer] = useState('');
+  const [rechnungMwst, setRechnungMwst] = useState<0 | 7 | 19>(7);
+  const [rechnungSprache, setRechnungSprache] = useState<'de' | 'en'>('de');
+  const [rechnungSending, setRechnungSending] = useState(false);
+  const [rechnungSuccess, setRechnungSuccess] = useState(false);
+  const [rechnungError, setRechnungError] = useState('');
 
   useEffect(() => {
     const savedToken = localStorage.getItem('admin_token');
@@ -124,6 +140,9 @@ export default function AdminPage() {
       if (activeTab === 'prices') {
         loadPrices();
         settingsApi.getAll().then(s => setSettings(s)).catch(() => {});
+      }
+      if (activeTab === 'rechnung') {
+        adminApi.getBankSettings().then(d => setBankSettings(d)).catch(() => {});
       }
     }
   }, [isLoggedIn, activeTab, loadStats, loadBookings, loadPrices]);
@@ -222,11 +241,12 @@ export default function AdminPage() {
 
       <div className="max-w-7xl mx-auto p-4 lg:p-6">
         {/* Tabs */}
-        <div className="flex gap-2 mb-6">
+        <div className="flex gap-2 mb-6 flex-wrap">
           {[
             { id: 'dashboard' as Tab, icon: BarChart3, label: 'Dashboard' },
             { id: 'bookings' as Tab, icon: List, label: 'Buchungen' },
             { id: 'prices' as Tab, icon: Tag, label: 'Preise' },
+            { id: 'rechnung' as Tab, icon: FileText, label: 'Rechnung' },
           ].map(({ id, icon: Icon, label }) => (
             <button
               key={id}
@@ -931,7 +951,7 @@ export default function AdminPage() {
                 </div>
               ))}
 
-              <div className="flex gap-3 pt-4">
+              <div className="flex gap-3 pt-4 flex-wrap">
                 <a
                   href={`tel:${selectedBooking.phone}`}
                   className="flex-1 flex items-center justify-center gap-2 bg-green-500 hover:bg-green-600 text-white py-2 rounded-xl text-sm font-medium transition-colors"
@@ -946,7 +966,265 @@ export default function AdminPage() {
                 >
                   WhatsApp
                 </a>
+                <button
+                  onClick={() => {
+                    setRechnungsnummer('');
+                    setRechnungMwst(7);
+                    setRechnungSprache('de');
+                    setRechnungSuccess(false);
+                    setRechnungError('');
+                    setShowRechnungModal(true);
+                  }}
+                  className="flex-1 flex items-center justify-center gap-2 bg-primary-600 hover:bg-primary-700 text-white py-2 rounded-xl text-sm font-medium transition-colors"
+                >
+                  <FileText size={15} />
+                  Rechnung senden
+                </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Rechnung Tab Content */}
+      {activeTab === 'rechnung' && (
+        <div className="space-y-6">
+          {bankSuccess && (
+            <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-xl text-sm flex items-center gap-2">
+              <Check size={16} />
+              {bankSuccess}
+            </div>
+          )}
+
+          {/* Bankverbindung */}
+          <div className="bg-white rounded-2xl shadow-sm p-6">
+            <div className="flex items-center gap-2 mb-5">
+              <div className="w-9 h-9 bg-primary-100 rounded-xl flex items-center justify-center">
+                <Building2 size={18} className="text-primary-600" />
+              </div>
+              <div>
+                <h3 className="font-bold text-gray-900 text-lg">Bankverbindung</h3>
+                <p className="text-xs text-gray-500">Wird auf der Rechnung und im PDF angezeigt</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {[
+                { key: 'bank_kontoinhaber', label: 'Kontoinhaber', placeholder: 'Taxi N&N GbR' },
+                { key: 'bank_name', label: 'Bankname', placeholder: 'Sparkasse / Deutsche Bank...' },
+                { key: 'bank_iban', label: 'IBAN', placeholder: 'DE89 3704 0044 0532 0130 00' },
+                { key: 'bank_bic', label: 'BIC / SWIFT', placeholder: 'COBADEFFXXX' },
+              ].map(({ key, label, placeholder }) => (
+                <div key={key}>
+                  <label className="block text-xs text-gray-500 uppercase tracking-wide font-medium mb-1">{label}</label>
+                  <input
+                    type="text"
+                    value={bankSettings[key] || ''}
+                    onChange={(e) => setBankSettings(prev => ({ ...prev, [key]: key === 'bank_iban' ? e.target.value.toUpperCase() : e.target.value }))}
+                    placeholder={placeholder}
+                    className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Firmendaten */}
+          <div className="bg-white rounded-2xl shadow-sm p-6">
+            <div className="flex items-center gap-2 mb-5">
+              <div className="w-9 h-9 bg-blue-100 rounded-xl flex items-center justify-center">
+                <FileText size={18} className="text-blue-600" />
+              </div>
+              <div>
+                <h3 className="font-bold text-gray-900 text-lg">Firmendaten</h3>
+                <p className="text-xs text-gray-500">Erscheinen im Briefkopf der Rechnung</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {[
+                { key: 'company_name', label: 'Firmenname', placeholder: 'Taxi N&N GbR' },
+                { key: 'company_address', label: 'Adresse', placeholder: 'Eisvogelweg 2, 85356 Freising' },
+                { key: 'company_phone', label: 'Telefon', placeholder: '+49 151 4162 0000' },
+                { key: 'company_email', label: 'E-Mail', placeholder: 'info@flughafen-muenchen.taxi' },
+                { key: 'company_steuernr', label: 'Steuer-Nr.', placeholder: '123/456/78900' },
+                { key: 'company_ustidnr', label: 'USt-IdNr.', placeholder: 'DE123456789' },
+              ].map(({ key, label, placeholder }) => (
+                <div key={key}>
+                  <label className="block text-xs text-gray-500 uppercase tracking-wide font-medium mb-1">{label}</label>
+                  <input
+                    type="text"
+                    value={bankSettings[key] || ''}
+                    onChange={(e) => setBankSettings(prev => ({ ...prev, [key]: e.target.value }))}
+                    placeholder={placeholder}
+                    className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <button
+            onClick={async () => {
+              setBankSaving(true);
+              try {
+                const updated = await adminApi.updateBankSettings(bankSettings);
+                setBankSettings(updated);
+                setBankSuccess('Einstellungen gespeichert!');
+                setTimeout(() => setBankSuccess(''), 3000);
+              } catch {
+                setBankSuccess('');
+              } finally {
+                setBankSaving(false);
+              }
+            }}
+            disabled={bankSaving}
+            className="w-full bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white py-3 rounded-xl font-semibold flex items-center justify-center gap-2 transition-colors"
+          >
+            {bankSaving ? <RefreshCw size={16} className="animate-spin" /> : <Check size={16} />}
+            {bankSaving ? 'Speichern...' : 'Speichern'}
+          </button>
+
+          <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 text-sm text-blue-700">
+            <p><strong>Hinweis:</strong> Um eine Rechnung zu senden, öffnen Sie eine Buchung unter &quot;Buchungen&quot; und klicken Sie auf &quot;Rechnung senden&quot;.</p>
+          </div>
+        </div>
+      )}
+
+      {/* Rechnung Modal */}
+      {showRechnungModal && selectedBooking && (
+        <div
+          className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-4"
+          onClick={(e) => { if (e.target === e.currentTarget && !rechnungSending) setShowRechnungModal(false); }}
+        >
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            {/* Header */}
+            <div className="bg-primary-600 text-white p-5 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 bg-primary-500 rounded-xl flex items-center justify-center">
+                  <FileText size={18} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-lg">Rechnung erstellen</h3>
+                  <p className="text-primary-200 text-xs">{selectedBooking.booking_number}</p>
+                </div>
+              </div>
+              {!rechnungSending && (
+                <button onClick={() => setShowRechnungModal(false)} className="p-2 hover:bg-primary-500 rounded-lg">
+                  <X size={18} />
+                </button>
+              )}
+            </div>
+
+            <div className="p-6 space-y-4">
+              {/* Customer summary */}
+              <div className="bg-gray-50 rounded-xl p-4 grid grid-cols-2 gap-2 text-sm">
+                <div>
+                  <p className="text-xs text-gray-500">Kunde</p>
+                  <p className="font-semibold text-gray-900">{selectedBooking.name}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Betrag</p>
+                  <p className="font-bold text-primary-600 text-base">{formatPrice(selectedBooking.price)}</p>
+                </div>
+                <div className="col-span-2">
+                  <p className="text-xs text-gray-500">E-Mail</p>
+                  <p className="font-medium text-gray-700">{selectedBooking.email}</p>
+                </div>
+              </div>
+
+              {/* Rechnungsnummer */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Rechnungsnummer <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={rechnungsnummer}
+                  onChange={(e) => setRechnungsnummer(e.target.value)}
+                  placeholder="z.B. 2026-001"
+                  disabled={rechnungSending || rechnungSuccess}
+                  className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:bg-gray-50 font-mono"
+                />
+              </div>
+
+              {/* Sprache + MwSt in a row */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Sprache</label>
+                  <select
+                    value={rechnungSprache}
+                    onChange={(e) => setRechnungSprache(e.target.value as 'de' | 'en')}
+                    disabled={rechnungSending || rechnungSuccess}
+                    className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:bg-gray-50"
+                  >
+                    <option value="de">🇩🇪 Deutsch</option>
+                    <option value="en">🇬🇧 English</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">MwSt.-Satz</label>
+                  <select
+                    value={rechnungMwst}
+                    onChange={(e) => setRechnungMwst(Number(e.target.value) as 0 | 7 | 19)}
+                    disabled={rechnungSending || rechnungSuccess}
+                    className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:bg-gray-50"
+                  >
+                    <option value={7}>7%</option>
+                    <option value={0}>0%</option>
+                    <option value={19}>19%</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Success / Error messages */}
+              {rechnungSuccess && (
+                <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-xl text-sm flex items-center gap-2">
+                  <Check size={16} />
+                  Rechnung erfolgreich gesendet!
+                </div>
+              )}
+              {rechnungError && (
+                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm flex items-center gap-2">
+                  <X size={16} />
+                  {rechnungError}
+                </div>
+              )}
+
+              {/* Send button */}
+              {!rechnungSuccess ? (
+                <button
+                  onClick={async () => {
+                    if (!rechnungsnummer.trim()) {
+                      setRechnungError('Bitte Rechnungsnummer eingeben.');
+                      return;
+                    }
+                    setRechnungError('');
+                    setRechnungSending(true);
+                    try {
+                      await adminApi.sendRechnung(selectedBooking.id, rechnungsnummer.trim(), rechnungMwst, rechnungSprache);
+                      setRechnungSuccess(true);
+                    } catch (err: unknown) {
+                      const msg = err instanceof Error ? err.message : 'Fehler beim Senden';
+                      setRechnungError(msg);
+                    } finally {
+                      setRechnungSending(false);
+                    }
+                  }}
+                  disabled={rechnungSending || !rechnungsnummer.trim()}
+                  className="w-full bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white py-3 rounded-xl font-semibold flex items-center justify-center gap-2 transition-colors"
+                >
+                  {rechnungSending
+                    ? <><RefreshCw size={16} className="animate-spin" /> PDF wird erstellt...</>
+                    : <><Send size={16} /> PDF erstellen &amp; per E-Mail senden</>
+                  }
+                </button>
+              ) : (
+                <button
+                  onClick={() => setShowRechnungModal(false)}
+                  className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 rounded-xl font-semibold flex items-center justify-center gap-2 transition-colors"
+                >
+                  Schließen
+                </button>
+              )}
             </div>
           </div>
         </div>
