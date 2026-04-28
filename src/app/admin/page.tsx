@@ -56,6 +56,9 @@ export default function AdminPage() {
   const [rechnungsnummer, setRechnungsnummer] = useState('');
   const [rechnungMwst, setRechnungMwst] = useState<0 | 7 | 19>(7);
   const [rechnungSprache, setRechnungSprache] = useState<'de' | 'en'>('de');
+  const [rechnungEmpfaenger, setRechnungEmpfaenger] = useState('');
+  const [editingEmpfaenger, setEditingEmpfaenger] = useState(false);
+  const [rechnungZahlungsart, setRechnungZahlungsart] = useState<'ueberweisung' | 'bar' | 'kreditkarte'>('ueberweisung');
   const [rechnungSending, setRechnungSending] = useState(false);
   const [rechnungSuccess, setRechnungSuccess] = useState(false);
   const [rechnungError, setRechnungError] = useState('');
@@ -306,6 +309,7 @@ export default function AdminPage() {
                   <thead>
                     <tr className="border-b border-gray-100">
                       <th className="text-left py-2 px-2 text-gray-500 font-medium">Buchung</th>
+                      <th className="text-left py-2 px-2 text-gray-500 font-medium">Gebucht am</th>
                       <th className="text-left py-2 px-2 text-gray-500 font-medium">Kunde</th>
                       <th className="text-left py-2 px-2 text-gray-500 font-medium">Von → Nach</th>
                       <th className="text-left py-2 px-2 text-gray-500 font-medium">Preis</th>
@@ -316,6 +320,7 @@ export default function AdminPage() {
                     {((stats.recentBookings as Booking[]) || []).map((b: Booking) => (
                       <tr key={b.id} className="border-b border-gray-50 hover:bg-gray-50">
                         <td className="py-2 px-2 font-mono text-xs">{b.booking_number}</td>
+                        <td className="py-2 px-2 text-xs text-gray-500">{formatDateTime(b.created_at)}</td>
                         <td className="py-2 px-2">{b.name}</td>
                         <td className="py-2 px-2 text-xs text-gray-600 max-w-xs truncate">
                           {b.pickup_address.substring(0, 25)}... → {b.dropoff_address.substring(0, 25)}...
@@ -971,6 +976,9 @@ export default function AdminPage() {
                     setRechnungsnummer('');
                     setRechnungMwst(7);
                     setRechnungSprache('de');
+                    setRechnungEmpfaenger(selectedBooking.name + (selectedBooking.email ? '\n' + selectedBooking.email : ''));
+                    setEditingEmpfaenger(false);
+                    setRechnungZahlungsart(selectedBooking.payment_method === 'card' ? 'kreditkarte' : 'bar');
                     setRechnungSuccess(false);
                     setRechnungError('');
                     setShowRechnungModal(true);
@@ -1116,18 +1124,44 @@ export default function AdminPage() {
 
             <div className="p-6 space-y-4">
               {/* Customer summary */}
-              <div className="bg-gray-50 rounded-xl p-4 grid grid-cols-2 gap-2 text-sm">
-                <div>
-                  <p className="text-xs text-gray-500">Kunde</p>
-                  <p className="font-semibold text-gray-900">{selectedBooking.name}</p>
+              <div className="bg-gray-50 rounded-xl p-4 space-y-2 text-sm">
+                <div className="flex gap-4">
+                  <div>
+                    <p className="text-xs text-gray-500">Buchung</p>
+                    <p className="font-semibold text-gray-900">{selectedBooking.booking_number}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Betrag</p>
+                    <p className="font-bold text-primary-600">{formatPrice(selectedBooking.price)}</p>
+                  </div>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500">Betrag</p>
-                  <p className="font-bold text-primary-600 text-base">{formatPrice(selectedBooking.price)}</p>
-                </div>
-                <div className="col-span-2">
-                  <p className="text-xs text-gray-500">E-Mail</p>
-                  <p className="font-medium text-gray-700">{selectedBooking.email}</p>
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="text-xs text-gray-500 uppercase tracking-wide font-medium">Rechnungsempfänger</p>
+                    {!rechnungSuccess && (
+                      <button
+                        onClick={() => setEditingEmpfaenger(e => !e)}
+                        className="p-1 rounded hover:bg-gray-200 transition-colors"
+                        title="Adresse bearbeiten"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-gray-500">
+                          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                  {editingEmpfaenger ? (
+                    <textarea
+                      value={rechnungEmpfaenger}
+                      onChange={(e) => setRechnungEmpfaenger(e.target.value)}
+                      rows={5}
+                      placeholder={'Vor- und Nachname\nFirma (optional)\nStraße und Hausnummer\nPLZ Ort\nLand'}
+                      className="w-full border border-primary-400 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white resize-none font-mono"
+                    />
+                  ) : (
+                    <p className="text-gray-800 whitespace-pre-line text-sm leading-relaxed">{rechnungEmpfaenger || '—'}</p>
+                  )}
                 </div>
               </div>
 
@@ -1174,6 +1208,38 @@ export default function AdminPage() {
                   </select>
                 </div>
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Zahlungsart</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {([
+                    { val: 'bar', label: '💵 Bar' },
+                    { val: 'kreditkarte', label: '💳 Kreditkarte' },
+                    { val: 'ueberweisung', label: '🏦 Überweisung' },
+                  ] as const).map(({ val, label }) => (
+                    <button
+                      key={val}
+                      type="button"
+                      onClick={() => setRechnungZahlungsart(val)}
+                      disabled={rechnungSending || rechnungSuccess}
+                      className={`py-2.5 px-2 rounded-xl text-xs font-medium border-2 transition-colors disabled:opacity-50 ${
+                        rechnungZahlungsart === val
+                          ? 'border-primary-600 bg-primary-50 text-primary-700'
+                          : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                {rechnungZahlungsart !== 'ueberweisung' && (
+                  <p className="text-xs text-green-700 mt-1.5 flex items-center gap-1">
+                    <Check size={12} />
+                    {rechnungZahlungsart === 'bar'
+                      ? (rechnungSprache === 'en' ? 'Paid in Cash — no payment due date' : 'Bar bezahlt — kein Zahlungsziel')
+                      : (rechnungSprache === 'en' ? 'Paid by Credit Card — no payment due date' : 'Kreditkarte bezahlt — kein Zahlungsziel')}
+                  </p>
+                )}
+              </div>
 
               {/* Success / Error messages */}
               {rechnungSuccess && (
@@ -1200,7 +1266,7 @@ export default function AdminPage() {
                     setRechnungError('');
                     setRechnungSending(true);
                     try {
-                      await adminApi.sendRechnung(selectedBooking.id, rechnungsnummer.trim(), rechnungMwst, rechnungSprache);
+                      await adminApi.sendRechnung(selectedBooking.id, rechnungsnummer.trim(), rechnungMwst, rechnungSprache, rechnungEmpfaenger.trim(), rechnungZahlungsart);
                       setRechnungSuccess(true);
                     } catch (err: unknown) {
                       const msg = err instanceof Error ? err.message : 'Fehler beim Senden';
